@@ -97,6 +97,20 @@ export interface GrokConfig extends BaseLLMConfig {
 }
 
 /**
+ * Google Generative AI configuration options
+ */
+export interface GoogleGenAIProviderConfig extends BaseLLMConfig {
+    provider: "genai";
+    apiKey?: string;
+    thinking?: {
+        type: "enabled" | "disabled";
+        budget_tokens?: number;
+    };
+    topK?: number;
+    topP?: number;
+}
+
+/**
  * Ollama-specific configuration options
  */
 export interface OllamaConfig extends BaseLLMConfig {
@@ -123,6 +137,7 @@ export type LLMConfig =
     | OpenAIConfig
     | AnthropicConfig
     | GrokConfig
+    | GoogleGenAIProviderConfig
     | OllamaConfig
     | OtherProviderConfig;
 

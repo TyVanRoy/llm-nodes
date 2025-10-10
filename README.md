@@ -371,14 +371,16 @@ The library now includes native support for advanced reasoning and thinking mode
 ### Supported Research Models
 
 **OpenAI:**
-- o1-preview, o1-mini
-- o3, o3-mini
-- o4-mini
+
+-   o1-preview, o1-mini
+-   o3, o3-mini
+-   o4-mini
 
 **Anthropic:**
-- claude-3-7-sonnet
-- claude-3.7-sonnet
-- claude-3-7-sonnet-latest
+
+-   claude-3-7-sonnet
+-   claude-3.7-sonnet
+-   claude-3-7-sonnet-latest
 
 ### Basic Usage
 
@@ -395,11 +397,11 @@ const reasoningNode = new LLMNode({
         model: "o3-mini",
         enableResearch: true,
         reasoning: {
-            effort: "high",      // "low" | "medium" | "high"
-            summary: "detailed"  // "auto" | "concise" | "detailed"
-        }
+            effort: "high", // "low" | "medium" | "high"
+            summary: "detailed", // "auto" | "concise" | "detailed"
+        },
     },
-    parser: jsonParser()
+    parser: jsonParser(),
 });
 
 // Anthropic Claude 3.7 with thinking mode
@@ -411,10 +413,10 @@ const thinkingNode = new LLMNode({
         enableResearch: true,
         thinking: {
             type: "enabled",
-            budget_tokens: 2000  // Max tokens for thinking process
-        }
+            budget_tokens: 2000, // Max tokens for thinking process
+        },
     },
-    parser: textParser()
+    parser: textParser(),
 });
 ```
 
@@ -428,7 +430,7 @@ const usage = reasoningNode.getTotalTokenUsage();
 
 console.log(`Input tokens: ${usage.inputTokens}`);
 console.log(`Output tokens: ${usage.outputTokens}`);
-console.log(`Research tokens: ${usage.researchTokens}`);  // Reasoning/thinking tokens
+console.log(`Research tokens: ${usage.researchTokens}`); // Reasoning/thinking tokens
 console.log(`Total tokens: ${usage.totalTokens}`);
 ```
 
@@ -440,8 +442,8 @@ The library automatically detects research-capable models:
 import { supportsResearchMode } from "llm-nodes";
 
 // Check if a model supports research features
-console.log(supportsResearchMode("openai", "o3-mini"));  // true
-console.log(supportsResearchMode("openai", "gpt-4"));    // false
+console.log(supportsResearchMode("openai", "o3-mini")); // true
+console.log(supportsResearchMode("openai", "gpt-4")); // false
 ```
 
 ### Research Mode in Pipelines
@@ -456,9 +458,9 @@ const analyzeNode = new LLMNode({
         provider: "anthropic",
         model: "claude-3-7-sonnet-latest",
         enableResearch: true,
-        thinking: { type: "enabled", budget_tokens: 1500 }
+        thinking: { type: "enabled", budget_tokens: 1500 },
     },
-    parser: jsonParser()
+    parser: jsonParser(),
 });
 
 // Second node uses regular mode for summarization
@@ -466,8 +468,8 @@ const summarizeNode = new TextNode({
     promptTemplate: "Summarize: {{analysis}}",
     llmConfig: {
         provider: "openai",
-        model: "gpt-4"
-    }
+        model: "gpt-4",
+    },
 });
 
 const pipeline = analyzeNode.pipe(summarizeNode);
@@ -487,7 +489,7 @@ console.log(`Total research tokens: ${usage.researchTokens}`);
 
 ## TODOs
 
-- RAGNode implementation
+-   RAGNode implementation
 
 ## License
 

@@ -1,8 +1,15 @@
-import * as dotenv from 'dotenv';
-import { ILLMProvider } from './providers/ILLMProvider';
-import { OpenAIProvider } from './providers/OpenAIProvider';
-import { AnthropicProvider } from './providers/AnthropicProvider';
-import { LLMConfig, LLMProvider, OpenAIConfig, AnthropicConfig } from "./types";
+import * as dotenv from "dotenv";
+import { ILLMProvider } from "./providers/ILLMProvider";
+import { OpenAIProvider } from "./providers/OpenAIProvider";
+import { AnthropicProvider } from "./providers/AnthropicProvider";
+import { GoogleGenAIProvider } from "./providers/GoogleGenAIProvider";
+import {
+    LLMConfig,
+    LLMProvider,
+    OpenAIConfig,
+    AnthropicConfig,
+    GoogleGenAIProviderConfig,
+} from "./types";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -32,13 +39,17 @@ export function isAnthropicConfig(
  * @throws Error if the provider is not supported
  */
 export function createProvider(config: LLMConfig): ILLMProvider {
-    switch(config.provider) {
-        case 'openai':
+    switch (config.provider) {
+        case "genai":
+            return new GoogleGenAIProvider(config as any); // Temporarily cast to any
+        case "openai":
             return new OpenAIProvider((config as OpenAIConfig).apiKey);
-        case 'anthropic':
+        case "anthropic":
             return new AnthropicProvider((config as AnthropicConfig).apiKey);
         default:
-            throw new Error(`Provider ${config.provider} not supported. Use 'openai' or 'anthropic'.`);
+            throw new Error(
+                `Provider ${config.provider} not supported. Use 'openai' or 'anthropic'.`
+            );
     }
 }
 
