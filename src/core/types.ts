@@ -6,6 +6,7 @@ export type TokenUsage = {
     outputTokens: number;
     thinkingTokens?: number; // For tracking reasoning/thinking tokens separately
     searchCount?: number; // For web search usage tracking
+    fetchCount?: number; // For web fetch usage tracking
 };
 
 /**
@@ -38,6 +39,18 @@ export interface WebSearchConfig {
     maxUses?: number; // Anthropic only
     allowedDomains?: string[]; // Anthropic only
     userLocation?: string; // Anthropic only
+}
+
+/**
+ * Web fetch configuration
+ */
+export interface WebFetchConfig {
+    enabled: boolean;
+    maxUses?: number; // Anthropic only
+    allowedDomains?: string[]; // Anthropic only
+    citations?: {
+        enabled: boolean;
+    }; // Anthropic only
 }
 
 /**
@@ -84,6 +97,7 @@ export interface AnthropicConfig extends BaseLLMConfig {
         budget_tokens: number; // Min 1024
     };
     webSearch?: WebSearchConfig;
+    webFetch?: WebFetchConfig;
     stream?: boolean; // Streaming flag for large responses
 }
 

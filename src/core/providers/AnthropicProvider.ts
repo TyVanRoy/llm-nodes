@@ -34,12 +34,34 @@ export class AnthropicProvider implements ILLMProvider {
             topP,
             thinking,
             webSearch,
+            webFetch,
             providerOptions,
             stream: stream,
         } = config;
 
         if (!maxTokens) {
             throw new Error("maxTokens is required for Anthropic models");
+        }
+
+        // Build tools array (can have both web search and web fetch)
+        const tools: any[] = [];
+        if (webSearch?.enabled) {
+            tools.push({
+                type: "web_search_20250924" as const,
+                name: "web_search" as const,
+                ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
+                ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
+                ...(webSearch.userLocation && { user_location: webSearch.userLocation }),
+            });
+        }
+        if (webFetch?.enabled) {
+            tools.push({
+                type: "web_fetch_20250910" as const,
+                name: "web_fetch" as const,
+                ...(webFetch.maxUses !== undefined && { max_uses: webFetch.maxUses }),
+                ...(webFetch.allowedDomains && { allowed_domains: webFetch.allowedDomains }),
+                ...(webFetch.citations && { citations: webFetch.citations }),
+            });
         }
 
         const baseParams = {
@@ -51,26 +73,23 @@ export class AnthropicProvider implements ILLMProvider {
             ...(topP !== undefined && { top_p: topP }),
             ...(providerOptions?.systemPrompt && { system: providerOptions.systemPrompt }),
             ...(thinking && { thinking }),
-            ...(webSearch?.enabled && {
-                tools: [{
-                    type: "web_search_20250305" as const,
-                    name: "web_search" as const,
-                    ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
-                    ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
-                    ...(webSearch.userLocation && { user_location: webSearch.userLocation }),
-                }]
-            }),
+            ...(tools.length > 0 && { tools }),
         };
 
-        const response = stream 
+        // Add beta header if web fetch is enabled
+        const requestOptions = webFetch?.enabled
+            ? { headers: { "anthropic-beta": "web-fetch-2025-09-10" } }
+            : undefined;
+
+        const response = stream
             ? await this.client.messages.create({
                 ...baseParams,
                 stream: true,
-            } as MessageCreateParamsStreaming)
+            } as MessageCreateParamsStreaming, requestOptions)
             : await this.client.messages.create({
                 ...baseParams,
                 stream: false,
-            } as MessageCreateParamsNonStreaming);
+            } as MessageCreateParamsNonStreaming, requestOptions);
 
         // Extract content and thinking
         let content = "";
@@ -145,6 +164,7 @@ export class AnthropicProvider implements ILLMProvider {
                 outputTokens: usage?.output_tokens || 0,
                 thinkingTokens: thinkingTokens,
                 searchCount: (usage as any)?.search_count,
+                fetchCount: (usage as any)?.fetch_count,
             },
             raw: response,
         };

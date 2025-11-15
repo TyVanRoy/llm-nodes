@@ -36,7 +36,7 @@
     "author": "Ty Van Roy <tyvanroy@gmail.com>",
     "license": "MIT",
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.60.0",
+        "@anthropic-ai/sdk": "^0.69.0",
         "@google/genai": "^1.20.0",
         "dotenv": "^16.4.7",
         "openai": "^5.13.1",
