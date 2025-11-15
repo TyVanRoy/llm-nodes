@@ -324,6 +324,92 @@ The core class that encapsulates an LLM interaction pattern.
 -   `OPENAI_REASONING_MODELS: string[]` - List of OpenAI models with reasoning support
 -   `ANTHROPIC_THINKING_MODELS: string[]` - List of Anthropic models with thinking support
 
+## Web Tools Support
+
+The library supports Anthropic's web tools for real-time information access:
+
+### Web Search
+
+Enable Claude to autonomously search the web and return information with citations:
+
+```typescript
+const searchNode = new TextNode({
+    promptTemplate: "What are the latest developments in {{topic}}?",
+    llmConfig: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-20250514",
+        maxTokens: 2048,
+        webSearch: {
+            enabled: true,
+            maxUses: 5, // Optional: limit number of searches
+            allowedDomains: ["example.com"], // Optional: restrict to specific domains
+            userLocation: "US", // Optional: for location-specific searches
+        },
+    },
+});
+```
+
+### Web Fetch
+
+Enable Claude to retrieve and analyze content from specific URLs:
+
+```typescript
+const fetchNode = new TextNode({
+    promptTemplate: "Analyze the article at {{url}}",
+    llmConfig: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-20250514",
+        maxTokens: 4096,
+        webFetch: {
+            enabled: true,
+            maxUses: 10, // Optional: limit number of fetches
+            allowedDomains: ["docs.example.com"], // Optional: security restriction
+            citations: {
+                enabled: true, // Optional: enable source citations
+            },
+        },
+    },
+});
+```
+
+### Using Both Tools Together
+
+Combine web search and web fetch for comprehensive research workflows:
+
+```typescript
+const researchNode = new TextNode({
+    promptTemplate: "Research {{topic}} and provide a detailed analysis",
+    llmConfig: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-20250514",
+        maxTokens: 4096,
+        webSearch: {
+            enabled: true,
+            maxUses: 3,
+        },
+        webFetch: {
+            enabled: true,
+            maxUses: 5,
+            citations: { enabled: true },
+        },
+    },
+});
+
+// Claude will first search for relevant articles,
+// then fetch and analyze the full content
+const result = await researchNode.execute({
+    topic: "quantum computing breakthroughs",
+});
+```
+
+**Key Features**:
+
+-   **Web Search**: Claude autonomously searches and returns results with citations ($10 per 1,000 searches)
+-   **Web Fetch**: Retrieves full content from URLs provided by users or search results
+-   **PDF Support**: Web fetch can retrieve and analyze PDF documents
+-   **Security**: Web fetch only accesses URLs explicitly provided or from previous search/fetch results
+-   **Usage Tracking**: Both `searchCount` and `fetchCount` are tracked in token usage
+
 ## Token Usage Tracking
 
 The library provides built-in token usage tracking:
@@ -346,6 +432,8 @@ const usage = textGenerator.getTotalTokenUsage();
 console.log(`Input Tokens: ${usage.inputTokens}`);
 console.log(`Output Tokens: ${usage.outputTokens}`);
 console.log(`Total Tokens: ${usage.totalTokens}`);
+console.log(`Search Count: ${usage.searchCount || 0}`); // Web search usage
+console.log(`Fetch Count: ${usage.fetchCount || 0}`); // Web fetch usage
 
 // Get detailed usage records
 const records = textGenerator.getUsageRecords();
