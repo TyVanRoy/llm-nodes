@@ -47,7 +47,7 @@ export class AnthropicProvider implements ILLMProvider {
         const tools: any[] = [];
         if (webSearch?.enabled) {
             tools.push({
-                type: "web_search_20250924" as const,
+                type: "web_search_20250305" as const,
                 name: "web_search" as const,
                 ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
                 ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
