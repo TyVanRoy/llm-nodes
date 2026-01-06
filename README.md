@@ -1,6 +1,6 @@
 # llm-nodes
 
-A lightweight, composable TypeScript library for working with LLMs that extends LangChain with a simpler, more intuitive API.
+A lightweight, composable TypeScript library for working with LLMs using native provider SDKs (Anthropic, OpenAI, Google, etc.) with a simple, intuitive API.
 
 ## Installation
 
@@ -29,7 +29,7 @@ GROK_API_KEY=your_grok_api_key_here
 -   **Research Mode Support**: Native support for advanced reasoning models (OpenAI o1/o3, Anthropic Claude 3.7+)
 -   **Specialized Nodes**: Purpose-built nodes for common tasks like classification, extraction, and RAG
 -   **Flexible Pipelines**: Advanced pipeline patterns for complex workflows
--   **LangChain Compatible**: Built on top of LangChain for compatibility with its ecosystem
+-   **Native SDKs**: Built directly on provider SDKs (Anthropic, OpenAI, Google) for optimal performance
 -   **Lightweight**: Minimal API with sensible defaults for rapid development
 
 ## Quick Start
