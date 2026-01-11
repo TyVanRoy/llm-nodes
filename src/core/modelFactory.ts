@@ -2,12 +2,14 @@ import * as dotenv from "dotenv";
 import { ILLMProvider } from "./providers/ILLMProvider";
 import { OpenAIProvider } from "./providers/OpenAIProvider";
 import { AnthropicProvider } from "./providers/AnthropicProvider";
+import { BedrockProvider } from "./providers/BedrockProvider";
 import { GoogleGenAIProvider } from "./providers/GoogleGenAIProvider";
 import {
     LLMConfig,
     LLMProvider,
     OpenAIConfig,
     AnthropicConfig,
+    BedrockConfig,
     GoogleGenAIProviderConfig,
 } from "./types";
 
@@ -33,6 +35,15 @@ export function isAnthropicConfig(
 }
 
 /**
+ * Type guard for Bedrock config
+ */
+export function isBedrockConfig(
+    config: LLMConfig
+): config is BedrockConfig {
+    return config.provider === "bedrock";
+}
+
+/**
  * Creates an instance of an LLM provider based on the provided configuration
  * @param config The LLM configuration
  * @returns An LLM provider instance
@@ -46,9 +57,17 @@ export function createProvider(config: LLMConfig): ILLMProvider {
             return new OpenAIProvider((config as OpenAIConfig).apiKey);
         case "anthropic":
             return new AnthropicProvider((config as AnthropicConfig).apiKey);
+        case "bedrock":
+            const bedrockConfig = config as BedrockConfig;
+            return new BedrockProvider({
+                awsRegion: bedrockConfig.awsRegion,
+                awsAccessKeyId: bedrockConfig.awsAccessKeyId,
+                awsSecretAccessKey: bedrockConfig.awsSecretAccessKey,
+                awsSessionToken: bedrockConfig.awsSessionToken,
+            });
         default:
             throw new Error(
-                `Provider ${config.provider} not supported. Use 'openai' or 'anthropic'.`
+                `Provider ${config.provider} not supported. Use 'openai', 'anthropic', or 'bedrock'.`
             );
     }
 }

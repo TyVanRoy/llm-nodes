@@ -102,6 +102,25 @@ export interface AnthropicConfig extends BaseLLMConfig {
 }
 
 /**
+ * AWS Bedrock-specific configuration options
+ * Uses Anthropic models via AWS Bedrock
+ */
+export interface BedrockConfig extends BaseLLMConfig {
+    provider: "bedrock";
+    awsRegion?: string;
+    awsAccessKeyId?: string;
+    awsSecretAccessKey?: string;
+    awsSessionToken?: string;
+    topK?: number;
+    topP?: number;
+    thinking?: {
+        type: "enabled";
+        budget_tokens: number; // Min 1024
+    };
+    stream?: boolean; // Streaming flag for large responses
+}
+
+/**
  * Grok-specific configuration options
  */
 export interface GrokConfig extends BaseLLMConfig {
@@ -150,6 +169,7 @@ export interface OtherProviderConfig extends BaseLLMConfig {
 export type LLMConfig =
     | OpenAIConfig
     | AnthropicConfig
+    | BedrockConfig
     | GrokConfig
     | GoogleGenAIProviderConfig
     | OllamaConfig
@@ -162,6 +182,8 @@ export type ConfigForProvider<P extends LLMProvider> = P extends "openai"
     ? OpenAIConfig
     : P extends "anthropic"
     ? AnthropicConfig
+    : P extends "bedrock"
+    ? BedrockConfig
     : P extends "grok"
     ? GrokConfig
     : P extends "ollama"

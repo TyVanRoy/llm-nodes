@@ -1,6 +1,6 @@
 # llm-nodes
 
-A lightweight, composable TypeScript library for working with LLMs using native provider SDKs (Anthropic, OpenAI, Google, etc.) with a simple, intuitive API.
+A lightweight, composable TypeScript library for working with LLMs using native provider SDKs (Anthropic, OpenAI, Google, AWS Bedrock) with a simple, intuitive API.
 
 ## Installation
 
@@ -17,6 +17,11 @@ This library uses dotenv to load API keys from your environment. Create a `.env`
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 GROK_API_KEY=your_grok_api_key_here
+
+# AWS Bedrock credentials (optional - can also use ~/.aws/credentials or IAM roles)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_here
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
 # Add others as needed
 ```
 
@@ -25,11 +30,11 @@ GROK_API_KEY=your_grok_api_key_here
 -   **Simplified Node Pattern**: Combines prompt templates, LLM configuration, and response parsing into a cohesive unit
 -   **Type-Safe**: Full TypeScript support with generics for input and output types
 -   **Composable**: Easily connect nodes using functional composition
--   **Provider Agnostic**: Support for multiple LLM providers (OpenAI, Anthropic, etc.)
+-   **Provider Agnostic**: Support for multiple LLM providers (OpenAI, Anthropic, AWS Bedrock, Google)
 -   **Research Mode Support**: Native support for advanced reasoning models (OpenAI o1/o3, Anthropic Claude 3.7+)
 -   **Specialized Nodes**: Purpose-built nodes for common tasks like classification, extraction, and RAG
 -   **Flexible Pipelines**: Advanced pipeline patterns for complex workflows
--   **Native SDKs**: Built directly on provider SDKs (Anthropic, OpenAI, Google) for optimal performance
+-   **Native SDKs**: Built directly on provider SDKs (Anthropic, OpenAI, Google, AWS Bedrock) for optimal performance
 -   **Lightweight**: Minimal API with sensible defaults for rapid development
 
 ## Quick Start
@@ -268,7 +273,7 @@ The core class that encapsulates an LLM interaction pattern.
 {
   promptTemplate: string | ((input: TInput) => string);
   llmConfig: {
-    provider: string;  // 'openai', 'anthropic', etc.
+    provider: string;  // 'openai', 'anthropic', 'bedrock', 'genai'
     model: string;
     temperature?: number;
     maxTokens?: number;
@@ -282,11 +287,16 @@ The core class that encapsulates an LLM interaction pattern.
       effort: 'low' | 'medium' | 'high';
       summary?: 'auto' | 'concise' | 'detailed';
     };
-    // Anthropic thinking configuration
+    // Anthropic/Bedrock thinking configuration
     thinking?: {
       type: 'enabled';
       budget_tokens: number;
     };
+    // AWS Bedrock configuration
+    awsRegion?: string;
+    awsAccessKeyId?: string;
+    awsSecretAccessKey?: string;
+    awsSessionToken?: string;
   };
   parser: (rawResponse: string) => TOutput;
 }
@@ -409,6 +419,129 @@ const result = await researchNode.execute({
 -   **PDF Support**: Web fetch can retrieve and analyze PDF documents
 -   **Security**: Web fetch only accesses URLs explicitly provided or from previous search/fetch results
 -   **Usage Tracking**: Both `searchCount` and `fetchCount` are tracked in token usage
+
+## AWS Bedrock Support
+
+The library supports AWS Bedrock for accessing Anthropic Claude models through AWS infrastructure. This is useful for enterprise deployments with existing AWS credentials and compliance requirements.
+
+### Basic Usage
+
+```typescript
+import { TextNode } from "llm-nodes";
+
+const bedrockNode = new TextNode({
+    promptTemplate: "Summarize the following: {{text}}",
+    llmConfig: {
+        provider: "bedrock",
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        maxTokens: 1024,
+    },
+});
+
+const result = await bedrockNode.execute({ text: "..." });
+```
+
+### Authentication
+
+The Bedrock provider supports multiple authentication methods:
+
+**1. Environment Variables (recommended)**
+
+```bash
+# Set in your environment or .env file
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+```
+
+**2. AWS Credentials File**
+
+The SDK automatically reads from `~/.aws/credentials`:
+
+```ini
+[default]
+aws_access_key_id = your_access_key
+aws_secret_access_key = your_secret_key
+region = us-east-1
+```
+
+**3. IAM Roles**
+
+When running on AWS (EC2, Lambda, ECS), the SDK automatically uses the attached IAM role.
+
+**4. Explicit Configuration**
+
+```typescript
+const node = new TextNode({
+    promptTemplate: "{{prompt}}",
+    llmConfig: {
+        provider: "bedrock",
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        maxTokens: 1024,
+        awsRegion: "us-west-2",
+        awsAccessKeyId: "AKIA...",
+        awsSecretAccessKey: "...",
+        awsSessionToken: "...", // Optional, for temporary credentials
+    },
+});
+```
+
+### Bedrock Model IDs
+
+Use Bedrock-style model identifiers:
+
+| Model | Bedrock Model ID |
+|-------|------------------|
+| Claude 3.5 Sonnet v2 | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
+| Claude 3.5 Haiku | `anthropic.claude-3-5-haiku-20241022-v1:0` |
+| Claude 3 Opus | `anthropic.claude-3-opus-20240229-v1:0` |
+| Claude 3 Sonnet | `anthropic.claude-3-sonnet-20240229-v1:0` |
+| Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` |
+
+### Extended Thinking with Bedrock
+
+Bedrock supports Anthropic's extended thinking feature:
+
+```typescript
+const thinkingNode = new TextNode({
+    promptTemplate: "Solve this step by step: {{problem}}",
+    llmConfig: {
+        provider: "bedrock",
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        maxTokens: 4096,
+        thinking: {
+            type: "enabled",
+            budget_tokens: 2000,
+        },
+    },
+});
+```
+
+### Streaming with Bedrock
+
+Enable streaming for large responses:
+
+```typescript
+const streamingNode = new TextNode({
+    promptTemplate: "Write a detailed essay about {{topic}}",
+    llmConfig: {
+        provider: "bedrock",
+        model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        maxTokens: 4096,
+        stream: true,
+    },
+});
+```
+
+### Key Differences from Direct Anthropic API
+
+| Feature | Anthropic API | AWS Bedrock |
+|---------|---------------|-------------|
+| Authentication | API Key | AWS Credentials |
+| Web Search | Supported | Not Available |
+| Web Fetch | Supported | Not Available |
+| Extended Thinking | Supported | Supported |
+| Streaming | Supported | Supported |
 
 ## Token Usage Tracking
 
