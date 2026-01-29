@@ -110,6 +110,7 @@ export class AnthropicProvider implements ILLMProvider {
                         if (event.usage) {
                             usage = {
                                 ...usage,
+                                input_tokens: (usage?.input_tokens || 0) + (event.usage.input_tokens || 0),
                                 output_tokens: (usage?.output_tokens || 0) + (event.usage.output_tokens || 0),
                             } as Message["usage"];
                         }
