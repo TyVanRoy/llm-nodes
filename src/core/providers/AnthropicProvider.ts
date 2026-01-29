@@ -6,7 +6,8 @@ import {
     RawMessageStreamEvent, 
     Message,
     MessageCreateParamsNonStreaming,
-    MessageCreateParamsStreaming 
+    MessageCreateParamsStreaming, 
+    MessageDeltaUsage
 } from "@anthropic-ai/sdk/resources/messages";
 
 /**
@@ -94,7 +95,7 @@ export class AnthropicProvider implements ILLMProvider {
         // Extract content and thinking
         let content = "";
         let thinkingContent = "";
-        let usage: Message["usage"] | undefined;
+        let usage: Message["usage"] | MessageDeltaUsage | undefined;
 
         // Stream response handling
         if (stream) {
@@ -108,11 +109,7 @@ export class AnthropicProvider implements ILLMProvider {
                     case "message_delta":
                         // Update usage with delta
                         if (event.usage) {
-                            usage = {
-                                ...usage,
-                                input_tokens: (usage?.input_tokens || 0) + (event.usage.input_tokens || 0),
-                                output_tokens: (usage?.output_tokens || 0) + (event.usage.output_tokens || 0),
-                            } as Message["usage"];
+                            usage = event.usage;
                         }
                         break;
                     case "content_block_start":
