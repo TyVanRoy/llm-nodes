@@ -6,8 +6,11 @@ import {
     LLMConfig,
     TokenUsage,
     UsageRecord,
+    BatchMetadata,
+    BatchResult,
+    BatchItemResult,
 } from "./types";
-import { ILLMProvider } from "./providers/ILLMProvider";
+import { ILLMProvider, ProviderBatchRequest } from "./providers/ILLMProvider";
 import { createProvider } from "./modelFactory";
 
 /**
@@ -162,6 +165,104 @@ export class LLMNode<TInput, TOutput> implements IExecutable<TInput, TOutput> {
      */
     clearUsageRecords(): void {
         this.usageRecords = [];
+    }
+
+    /**
+     * Create a batch of requests for async processing.
+     * Returns serializable metadata that the caller persists and passes to retrieveBatch later.
+     */
+    async createBatch(inputs: TInput[]): Promise<BatchMetadata> {
+        if (!this.provider.supportsBatch?.()) {
+            throw new Error(
+                `Provider '${this.llmConfig.provider}' does not support batch processing. ` +
+                `Batch processing is available for 'openai' and 'anthropic' providers.`
+            );
+        }
+
+        const requests: ProviderBatchRequest[] = inputs.map((input, i) => ({
+            customId: `req-${i}`,
+            prompt: this.generatePrompt(input),
+        }));
+
+        return this.provider.createBatch!(requests, this.llmConfig);
+    }
+
+    /**
+     * Retrieve batch results using metadata from createBatch.
+     * Parses each raw response through the node's parser.
+     * Returns per-item results with status, parsed output, raw output, and token usage.
+     */
+    async retrieveBatch(metadata: BatchMetadata): Promise<BatchResult<TOutput>> {
+        if (!this.provider.retrieveBatch) {
+            throw new Error(
+                `Provider '${this.llmConfig.provider}' does not support batch retrieval.`
+            );
+        }
+
+        const providerResponse = await this.provider.retrieveBatch(metadata, this.llmConfig);
+
+        // If not completed, pass through status and counts
+        if (providerResponse.status !== "completed" || !providerResponse.results) {
+            return {
+                status: providerResponse.status,
+                requestCounts: providerResponse.requestCounts,
+            };
+        }
+
+        // Parse each result through the node's parser
+        const results: BatchItemResult<TOutput>[] = providerResponse.results.map((providerItem) => {
+            // Extract index from customId ("req-0" → 0)
+            const index = parseInt(providerItem.customId.replace("req-", ""), 10);
+
+            if (providerItem.status !== "success" || !providerItem.content) {
+                return {
+                    index,
+                    status: providerItem.status,
+                    rawOutput: providerItem.content,
+                    error: providerItem.error,
+                    tokenUsage: providerItem.tokenUsage,
+                };
+            }
+
+            // Attempt to parse through the node's parser
+            try {
+                const output = this.parser(providerItem.content);
+                return {
+                    index,
+                    status: "success" as const,
+                    output,
+                    rawOutput: providerItem.content,
+                    tokenUsage: providerItem.tokenUsage,
+                };
+            } catch (parseError: any) {
+                return {
+                    index,
+                    status: "failed" as const,
+                    rawOutput: providerItem.content,
+                    error: `Parse error: ${parseError.message}`,
+                    tokenUsage: providerItem.tokenUsage,
+                };
+            }
+        });
+
+        // Sort by original input index
+        results.sort((a, b) => a.index - b.index);
+
+        // Record aggregate token usage
+        const aggregateUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+        for (const item of results) {
+            if (item.tokenUsage) {
+                aggregateUsage.inputTokens += item.tokenUsage.inputTokens;
+                aggregateUsage.outputTokens += item.tokenUsage.outputTokens;
+            }
+        }
+        this.recordUsage(aggregateUsage);
+
+        return {
+            status: "completed",
+            results,
+            requestCounts: providerResponse.requestCounts,
+        };
     }
 
     /**

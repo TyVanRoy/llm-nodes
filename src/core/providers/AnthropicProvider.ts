@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ILLMProvider, LLMResponse } from "./ILLMProvider";
-import { AnthropicConfig } from "../types";
+import { ILLMProvider, LLMResponse, ProviderBatchRequest, ProviderBatchResponse, ProviderBatchItemResult } from "./ILLMProvider";
+import { AnthropicConfig, BatchMetadata, BatchStatus, LLMConfig } from "../types";
 import { Stream } from "@anthropic-ai/sdk/core/streaming";
-import { 
-    RawMessageStreamEvent, 
+import {
+    RawMessageStreamEvent,
     Message,
     MessageCreateParamsNonStreaming,
-    MessageCreateParamsStreaming, 
+    MessageCreateParamsStreaming,
     MessageDeltaUsage
 } from "@anthropic-ai/sdk/resources/messages";
 
@@ -166,5 +166,133 @@ export class AnthropicProvider implements ILLMProvider {
             },
             raw: response,
         };
+    }
+
+    supportsBatch(): boolean {
+        return true;
+    }
+
+    async createBatch(
+        requests: ProviderBatchRequest[],
+        config: LLMConfig
+    ): Promise<BatchMetadata> {
+        const anthropicConfig = config as AnthropicConfig;
+        const { model, maxTokens, temperature, topK, topP, thinking, providerOptions } = anthropicConfig;
+
+        if (!maxTokens) {
+            throw new Error("maxTokens is required for Anthropic batch requests");
+        }
+
+        const batchRequests = requests.map((req) => ({
+            custom_id: req.customId,
+            params: {
+                model,
+                max_tokens: maxTokens,
+                messages: [{ role: "user" as const, content: req.prompt }],
+                ...(temperature !== undefined && { temperature }),
+                ...(topK !== undefined && { top_k: topK }),
+                ...(topP !== undefined && { top_p: topP }),
+                ...(providerOptions?.systemPrompt && { system: providerOptions.systemPrompt }),
+                ...(thinking && { thinking }),
+            },
+        }));
+
+        const batch = await this.client.messages.batches.create({
+            requests: batchRequests,
+        });
+
+        return {
+            batchId: batch.id,
+            provider: "anthropic",
+            model,
+            requestCount: requests.length,
+            createdAt: new Date().toISOString(),
+        };
+    }
+
+    async retrieveBatch(
+        metadata: BatchMetadata,
+        config: LLMConfig
+    ): Promise<ProviderBatchResponse> {
+        const batch = await this.client.messages.batches.retrieve(metadata.batchId);
+
+        // Map Anthropic processing_status to our BatchStatus
+        let status: BatchStatus;
+        switch (batch.processing_status) {
+            case "in_progress":
+                status = "in_progress";
+                break;
+            case "canceling":
+                status = "cancelling";
+                break;
+            case "ended":
+                status = "completed";
+                break;
+            default:
+                status = "in_progress";
+        }
+
+        const requestCounts = {
+            total: batch.request_counts.processing +
+                batch.request_counts.succeeded +
+                batch.request_counts.errored +
+                batch.request_counts.canceled +
+                batch.request_counts.expired,
+            completed: batch.request_counts.succeeded,
+            failed: batch.request_counts.errored,
+            expired: batch.request_counts.expired,
+            cancelled: batch.request_counts.canceled,
+        };
+
+        // If not ended, return status only
+        if (batch.processing_status !== "ended") {
+            return { status, requestCounts };
+        }
+
+        // Batch is ended — stream results
+        const results: ProviderBatchItemResult[] = [];
+
+        for await (const result of await this.client.messages.batches.results(metadata.batchId)) {
+            const itemResult: ProviderBatchItemResult = {
+                customId: result.custom_id,
+                status: 'failed',
+            };
+
+            switch (result.result.type) {
+                case "succeeded": {
+                    const message = result.result.message;
+                    let content = "";
+                    for (const block of message.content) {
+                        if (block.type === "text") {
+                            content += block.text;
+                        }
+                    }
+                    itemResult.status = "success";
+                    itemResult.content = content;
+                    itemResult.tokenUsage = {
+                        inputTokens: message.usage?.input_tokens || 0,
+                        outputTokens: message.usage?.output_tokens || 0,
+                    };
+                    break;
+                }
+                case "errored": {
+                    itemResult.status = "failed";
+                    itemResult.error = result.result.error?.error?.message || "Unknown error";
+                    break;
+                }
+                case "canceled": {
+                    itemResult.status = "cancelled";
+                    break;
+                }
+                case "expired": {
+                    itemResult.status = "expired";
+                    break;
+                }
+            }
+
+            results.push(itemResult);
+        }
+
+        return { status, results, requestCounts };
     }
 }

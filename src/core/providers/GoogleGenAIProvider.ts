@@ -53,4 +53,8 @@ export class GoogleGenAIProvider implements ILLMProvider {
             raw: response,
         };
     }
+
+    supportsBatch(): boolean {
+        return false;
+    }
 }

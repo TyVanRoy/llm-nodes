@@ -191,6 +191,59 @@ export type ConfigForProvider<P extends LLMProvider> = P extends "openai"
     : OtherProviderConfig;
 
 /**
+ * Unified batch status across providers
+ */
+export type BatchStatus =
+    | 'validating'   // OpenAI: input file being validated
+    | 'in_progress'  // Both: batch is processing
+    | 'finalizing'   // OpenAI: results being prepared
+    | 'completed'    // Both: done (Anthropic maps 'ended' → 'completed')
+    | 'failed'       // Both: batch-level failure
+    | 'expired'      // Both: 24h window exceeded
+    | 'cancelling'   // Both: cancel in progress
+    | 'cancelled';   // Both: cancelled
+
+/**
+ * Serializable metadata returned by createBatch.
+ * The caller is responsible for persisting this (DB, Redis, file, etc.)
+ * and passing it back to retrieveBatch later.
+ */
+export interface BatchMetadata {
+    batchId: string;
+    provider: string;
+    model: string;
+    requestCount: number;
+    createdAt: string; // ISO timestamp
+}
+
+/**
+ * Overall batch result returned by retrieveBatch
+ */
+export interface BatchResult<TOutput> {
+    status: BatchStatus;
+    results?: BatchItemResult<TOutput>[]; // Present when status is 'completed'
+    requestCounts?: {
+        total: number;
+        completed: number;
+        failed: number;
+        expired?: number;
+        cancelled?: number;
+    };
+}
+
+/**
+ * Per-item result within a batch
+ */
+export interface BatchItemResult<TOutput> {
+    index: number;             // Original input array index
+    status: 'success' | 'failed' | 'expired' | 'cancelled';
+    output?: TOutput;          // Parsed through node's parser
+    rawOutput?: string;        // Raw LLM response text
+    error?: string;            // Error message if failed
+    tokenUsage?: TokenUsage;   // Per-item token usage
+}
+
+/**
  * A prompt template, either as a string with variables or a function
  */
 export type PromptTemplate<TInput> = string | ((input: TInput) => string);

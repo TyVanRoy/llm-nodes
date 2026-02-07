@@ -12,6 +12,11 @@ export {
     // Token tracking types
     TokenUsage,
     UsageRecord,
+    // Batch processing types
+    BatchStatus,
+    BatchMetadata,
+    BatchResult,
+    BatchItemResult,
 } from "./core/types";
 export { 
     getApiKeyEnvVar,
@@ -19,7 +24,7 @@ export {
 } from "./core/modelFactory";
 
 // Provider exports
-export { ILLMProvider, LLMResponse } from "./core/providers/ILLMProvider";
+export { ILLMProvider, LLMResponse, ProviderBatchRequest, ProviderBatchResponse, ProviderBatchItemResult } from "./core/providers/ILLMProvider";
 export { OpenAIProvider } from "./core/providers/OpenAIProvider";
 export { AnthropicProvider } from "./core/providers/AnthropicProvider";
 

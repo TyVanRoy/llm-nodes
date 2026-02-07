@@ -11,12 +11,13 @@ export default async function main() {
 
     const textGenerator = new TextNode<TextNodeInput>({
         promptTemplate:
-            "Write a {{format}} about {{topic}} in {{style}} style with {{minWords}} to {{maxWords}} words.",
+            "Search the web for recent information about {{topic}} and write a {{format}} in {{style}} style with {{minWords}} to {{maxWords}} words.",
         llmConfig: {
             provider: "anthropic",
-            model: "claude-3-7-sonnet-20250219",
+            model: "claude-sonnet-4-5",
             maxTokens: 50000,
             stream: true,
+            webSearch: { enabled: true },
         },
     });
 
@@ -29,4 +30,5 @@ export default async function main() {
         maxWords: 150,
     });
     console.log(text);
+    console.log(JSON.stringify(textGenerator.getTotalTokenUsage(), null, 2));
 }

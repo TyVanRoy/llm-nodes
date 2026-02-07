@@ -146,4 +146,8 @@ export class BedrockProvider implements ILLMProvider {
             raw: response,
         };
     }
+
+    supportsBatch(): boolean {
+        return false;
+    }
 }
