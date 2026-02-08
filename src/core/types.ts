@@ -10,6 +10,15 @@ export type TokenUsage = {
 };
 
 /**
+ * A single chunk yielded during streaming LLM responses.
+ * Most chunks carry only `text`. The final chunk carries `tokenUsage` with `text: ""`.
+ */
+export interface StreamChunk {
+    text: string;
+    tokenUsage?: TokenUsage;
+}
+
+/**
  * Record of a single LLM call usage
  */
 export type UsageRecord = {

@@ -1,4 +1,4 @@
-import { TokenUsage, LLMConfig, BatchMetadata, BatchStatus } from "../types";
+import { TokenUsage, LLMConfig, BatchMetadata, BatchStatus, StreamChunk } from "../types";
 
 /**
  * Response from an LLM provider
@@ -60,6 +60,12 @@ export interface ILLMProvider {
      * Provider identifier
      */
     readonly provider: string;
+
+    /**
+     * Streaming invocation — yields incremental text deltas.
+     * The final chunk carries tokenUsage with text: "".
+     */
+    invokeStream?(prompt: string, config: LLMConfig): AsyncGenerator<StreamChunk>;
 
     /**
      * Whether this provider supports batch processing

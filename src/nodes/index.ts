@@ -25,6 +25,8 @@ export {
     type RAGResponse,
 } from "./RAGNode";
 
+export { StreamNode } from "./StreamNode";
+
 // Utility node types (no LLM calls)
 export { DataEnricherNode } from "./DataEnricherNode";
 export { MergeNode } from "./MergeNode";

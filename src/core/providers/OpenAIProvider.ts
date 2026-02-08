@@ -1,6 +1,6 @@
 import OpenAI, { toFile } from "openai";
 import { ILLMProvider, LLMResponse, ProviderBatchRequest, ProviderBatchResponse, ProviderBatchItemResult } from "./ILLMProvider";
-import { OpenAIConfig, BatchMetadata, BatchStatus, LLMConfig } from "../types";
+import { OpenAIConfig, BatchMetadata, BatchStatus, LLMConfig, StreamChunk, TokenUsage } from "../types";
 
 /**
  * OpenAI provider implementation
@@ -87,6 +87,129 @@ export class OpenAIProvider implements ILLMProvider {
         } else {
             return this.useChatCompletions(prompt, config);
         }
+    }
+
+    async *invokeStream(
+        prompt: string,
+        config: OpenAIConfig
+    ): AsyncGenerator<StreamChunk> {
+        const useResponsesAPI = this.shouldUseResponsesAPI(config.model);
+
+        if (useResponsesAPI) {
+            try {
+                yield* this.streamResponsesAPI(prompt, config);
+                return;
+            } catch (error: any) {
+                if (error?.status === 404) {
+                    yield* this.streamChatCompletions(prompt, config);
+                    return;
+                }
+                throw error;
+            }
+        }
+
+        yield* this.streamChatCompletions(prompt, config);
+    }
+
+    private async *streamChatCompletions(
+        prompt: string,
+        config: OpenAIConfig
+    ): AsyncGenerator<StreamChunk> {
+        const {
+            model,
+            temperature,
+            maxTokens,
+            topP,
+            frequencyPenalty,
+            presencePenalty,
+            providerOptions,
+        } = config;
+
+        const messages: any[] = [];
+        if (providerOptions?.systemPrompt) {
+            messages.push({ role: "system", content: providerOptions.systemPrompt });
+        }
+        messages.push({ role: "user", content: prompt });
+
+        const params: any = {
+            model,
+            messages,
+            stream: true,
+            stream_options: { include_usage: true },
+        };
+
+        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+        if (temperature !== undefined) params.temperature = temperature;
+        if (topP !== undefined) params.top_p = topP;
+        if (frequencyPenalty !== undefined) params.frequency_penalty = frequencyPenalty;
+        if (presencePenalty !== undefined) params.presence_penalty = presencePenalty;
+
+        const stream = await this.client.chat.completions.create(params) as unknown as AsyncIterable<any>;
+
+        const tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
+        for await (const chunk of stream) {
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+                yield { text: delta };
+            }
+            if (chunk.usage) {
+                tokenUsage.inputTokens = chunk.usage.prompt_tokens || 0;
+                tokenUsage.outputTokens = chunk.usage.completion_tokens || 0;
+            }
+        }
+
+        yield { text: "", tokenUsage };
+    }
+
+    private async *streamResponsesAPI(
+        prompt: string,
+        config: OpenAIConfig
+    ): AsyncGenerator<StreamChunk> {
+        const {
+            model,
+            temperature,
+            maxTokens,
+            topP,
+            frequencyPenalty,
+            presencePenalty,
+            reasoning,
+            webSearch,
+            providerOptions,
+        } = config;
+
+        const params: any = {
+            model,
+            input: prompt,
+            stream: true,
+        };
+
+        if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
+        if (providerOptions?.systemPrompt) params.instructions = providerOptions.systemPrompt;
+        if (temperature !== undefined) params.temperature = temperature;
+        if (topP !== undefined) params.top_p = topP;
+        if (frequencyPenalty !== undefined) params.frequency_penalty = frequencyPenalty;
+        if (presencePenalty !== undefined) params.presence_penalty = presencePenalty;
+        if (reasoning) params.reasoning = reasoning;
+        if (webSearch?.enabled) params.tools = [{ type: "web_search" }];
+
+        const stream = await this.client.responses.create(params) as unknown as AsyncIterable<any>;
+
+        const tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
+        for await (const event of stream) {
+            if (event.type === "response.output_text.delta") {
+                yield { text: (event as any).delta || "" };
+            } else if (event.type === "response.completed") {
+                const usage = (event as any).response?.usage;
+                if (usage) {
+                    tokenUsage.inputTokens = usage.input_tokens || 0;
+                    tokenUsage.outputTokens = usage.output_tokens || 0;
+                }
+            }
+        }
+
+        yield { text: "", tokenUsage };
     }
 
     private async useChatCompletions(

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ILLMProvider, LLMResponse, ProviderBatchRequest, ProviderBatchResponse, ProviderBatchItemResult } from "./ILLMProvider";
-import { AnthropicConfig, BatchMetadata, BatchStatus, LLMConfig } from "../types";
+import { AnthropicConfig, BatchMetadata, BatchStatus, LLMConfig, StreamChunk, TokenUsage } from "../types";
 import { Stream } from "@anthropic-ai/sdk/core/streaming";
 import {
     RawMessageStreamEvent,
@@ -166,6 +166,91 @@ export class AnthropicProvider implements ILLMProvider {
             },
             raw: response,
         };
+    }
+
+    async *invokeStream(
+        prompt: string,
+        config: AnthropicConfig
+    ): AsyncGenerator<StreamChunk> {
+        const {
+            model,
+            maxTokens,
+            temperature,
+            topK,
+            topP,
+            thinking,
+            webSearch,
+            webFetch,
+            providerOptions,
+        } = config;
+
+        if (!maxTokens) {
+            throw new Error("maxTokens is required for Anthropic models");
+        }
+
+        // Build tools array
+        const tools: any[] = [];
+        if (webSearch?.enabled) {
+            tools.push({
+                type: "web_search_20250305" as const,
+                name: "web_search" as const,
+                ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
+                ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
+                ...(webSearch.userLocation && { user_location: webSearch.userLocation }),
+            });
+        }
+        if (webFetch?.enabled) {
+            tools.push({
+                type: "web_fetch_20250910" as const,
+                name: "web_fetch" as const,
+                ...(webFetch.maxUses !== undefined && { max_uses: webFetch.maxUses }),
+                ...(webFetch.allowedDomains && { allowed_domains: webFetch.allowedDomains }),
+                ...(webFetch.citations && { citations: webFetch.citations }),
+            });
+        }
+
+        const baseParams = {
+            model,
+            max_tokens: maxTokens,
+            messages: [{ role: "user" as const, content: prompt }],
+            ...(temperature !== undefined && { temperature }),
+            ...(topK !== undefined && { top_k: topK }),
+            ...(topP !== undefined && { top_p: topP }),
+            ...(providerOptions?.systemPrompt && { system: providerOptions.systemPrompt }),
+            ...(thinking && { thinking }),
+            ...(tools.length > 0 && { tools }),
+        };
+
+        const requestOptions = webFetch?.enabled
+            ? { headers: { "anthropic-beta": "web-fetch-2025-09-10" } }
+            : undefined;
+
+        const stream = await this.client.messages.create({
+            ...baseParams,
+            stream: true,
+        } as MessageCreateParamsStreaming, requestOptions);
+
+        const tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
+        for await (const event of stream as Stream<RawMessageStreamEvent>) {
+            switch (event.type) {
+                case "message_start":
+                    tokenUsage.inputTokens = event.message.usage?.input_tokens || 0;
+                    break;
+                case "content_block_delta":
+                    if (event.delta.type === "text_delta") {
+                        yield { text: event.delta.text };
+                    }
+                    break;
+                case "message_delta":
+                    if (event.usage) {
+                        tokenUsage.outputTokens = event.usage.output_tokens || 0;
+                    }
+                    break;
+            }
+        }
+
+        yield { text: "", tokenUsage };
     }
 
     supportsBatch(): boolean {

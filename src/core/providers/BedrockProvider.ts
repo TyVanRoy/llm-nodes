@@ -1,6 +1,6 @@
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
 import { ILLMProvider, LLMResponse } from "./ILLMProvider";
-import { BedrockConfig } from "../types";
+import { BedrockConfig, StreamChunk, TokenUsage } from "../types";
 import { Stream } from "@anthropic-ai/sdk/core/streaming";
 import {
     RawMessageStreamEvent,
@@ -145,6 +145,63 @@ export class BedrockProvider implements ILLMProvider {
             },
             raw: response,
         };
+    }
+
+    async *invokeStream(
+        prompt: string,
+        config: BedrockConfig
+    ): AsyncGenerator<StreamChunk> {
+        const {
+            model,
+            maxTokens,
+            temperature,
+            topK,
+            topP,
+            thinking,
+            providerOptions,
+        } = config;
+
+        if (!maxTokens) {
+            throw new Error("maxTokens is required for Bedrock models");
+        }
+
+        const baseParams = {
+            model,
+            max_tokens: maxTokens,
+            messages: [{ role: "user" as const, content: prompt }],
+            ...(temperature !== undefined && { temperature }),
+            ...(topK !== undefined && { top_k: topK }),
+            ...(topP !== undefined && { top_p: topP }),
+            ...(providerOptions?.systemPrompt && { system: providerOptions.systemPrompt }),
+            ...(thinking && { thinking }),
+        };
+
+        const stream = await this.client.messages.create({
+            ...baseParams,
+            stream: true,
+        } as MessageCreateParamsStreaming);
+
+        const tokenUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
+        for await (const event of stream as Stream<RawMessageStreamEvent>) {
+            switch (event.type) {
+                case "message_start":
+                    tokenUsage.inputTokens = event.message.usage?.input_tokens || 0;
+                    break;
+                case "content_block_delta":
+                    if (event.delta.type === "text_delta") {
+                        yield { text: event.delta.text };
+                    }
+                    break;
+                case "message_delta":
+                    if (event.usage) {
+                        tokenUsage.outputTokens = event.usage.output_tokens || 0;
+                    }
+                    break;
+            }
+        }
+
+        yield { text: "", tokenUsage };
     }
 
     supportsBatch(): boolean {

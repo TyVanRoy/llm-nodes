@@ -12,6 +12,8 @@ export {
     // Token tracking types
     TokenUsage,
     UsageRecord,
+    // Streaming types
+    StreamChunk,
     // Batch processing types
     BatchStatus,
     BatchMetadata,
@@ -45,6 +47,7 @@ export {
     ExtractionNode,
     ChainNode,
     RAGNode,
+    StreamNode,
     // Utility nodes
     DataEnricherNode,
     MergeNode,
