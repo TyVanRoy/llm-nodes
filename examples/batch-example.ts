@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { StructuredOutputNode, BatchMetadata, BatchResult } from "../src/index";
+import { StructuredOutputNode, TextNode, BatchMetadata, BatchResult } from "../src/index";
 
 // --- Input & Output Schemas ---
 
@@ -135,4 +135,88 @@ export default async function main() {
     const successCount = result!.results!.filter((r) => r.status === "success").length;
     const failCount = result!.results!.filter((r) => r.status !== "success").length;
     console.log(`\n${successCount} succeeded, ${failCount} failed out of ${movies.length} total`);
+
+    // --- Web Search Batch ---
+    await runWebSearchBatch();
+}
+
+// --- Web Search Batch Example ---
+
+type WebSearchInput = { question: string };
+
+const webSearchNode = new TextNode<WebSearchInput>({
+    promptTemplate: `{{question}} Be concise (2-3 sentences) and cite your source URL.`,
+    llmConfig: {
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        maxTokens: 256,
+        webSearch: { enabled: true },
+    },
+});
+
+const webSearchQuestions: WebSearchInput[] = [
+    { question: "Who won the most recent Super Bowl and what was the final score?" },
+    { question: "What is the current price of Bitcoin in USD right now?" },
+    { question: "What was the #1 movie at the US box office last weekend?" },
+];
+
+async function runWebSearchBatch() {
+    console.log("\n=== Web Search Batch Example ===\n");
+    console.log(`Submitting ${webSearchQuestions.length} web search requests...\n`);
+
+    const metadata: BatchMetadata = await webSearchNode.createBatch(webSearchQuestions);
+    console.log("Batch created:");
+    console.log(JSON.stringify(metadata, null, 2));
+    console.log();
+
+    let result: BatchResult<string>;
+    let pollCount = 0;
+
+    while (true) {
+        pollCount++;
+        console.log(`[Poll #${pollCount}] Checking batch status...`);
+
+        result = await webSearchNode.retrieveBatch(metadata);
+
+        console.log(`  Status: ${result.status}`);
+        if (result.requestCounts) {
+            console.log(`  Counts: ${JSON.stringify(result.requestCounts)}`);
+        }
+
+        if (result.status === "completed") {
+            console.log("  Batch completed!\n");
+            break;
+        }
+
+        if (result.status === "failed" || result.status === "expired" || result.status === "cancelled") {
+            console.error(`  Batch ended with status: ${result.status}`);
+            return;
+        }
+
+        console.log(`  Waiting 10s before next poll...\n`);
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+    }
+
+    console.log("=== Web Search Results ===\n");
+
+    for (const item of result!.results!) {
+        const q = webSearchQuestions[item.index];
+        console.log(`[${item.index}] "${q.question}"`);
+        console.log(`    Status: ${item.status}`);
+
+        if (item.status === "success" && item.output) {
+            console.log(`    Answer: ${item.output}`);
+        } else {
+            console.log(`    Error: ${item.error}`);
+        }
+
+        if (item.tokenUsage) {
+            console.log(`    Tokens: ${item.tokenUsage.inputTokens} in / ${item.tokenUsage.outputTokens} out`);
+            if (item.tokenUsage.searchCount) {
+                console.log(`    Web searches: ${item.tokenUsage.searchCount}`);
+            }
+        }
+
+        console.log();
+    }
 }

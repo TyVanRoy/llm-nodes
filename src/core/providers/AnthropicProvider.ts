@@ -23,6 +23,35 @@ export class AnthropicProvider implements ILLMProvider {
         });
     }
 
+    private buildWebTools(config: AnthropicConfig): any[] {
+        const tools: any[] = [];
+        if (config.webSearch?.enabled) {
+            tools.push({
+                type: "web_search_20250305" as const,
+                name: "web_search" as const,
+                ...(config.webSearch.maxUses !== undefined && { max_uses: config.webSearch.maxUses }),
+                ...(config.webSearch.allowedDomains && { allowed_domains: config.webSearch.allowedDomains }),
+                ...(config.webSearch.userLocation && { user_location: config.webSearch.userLocation }),
+            });
+        }
+        if (config.webFetch?.enabled) {
+            tools.push({
+                type: "web_fetch_20250910" as const,
+                name: "web_fetch" as const,
+                ...(config.webFetch.maxUses !== undefined && { max_uses: config.webFetch.maxUses }),
+                ...(config.webFetch.allowedDomains && { allowed_domains: config.webFetch.allowedDomains }),
+                ...(config.webFetch.citations && { citations: config.webFetch.citations }),
+            });
+        }
+        return tools;
+    }
+
+    private buildRequestOptions(config: AnthropicConfig): object | undefined {
+        return config.webFetch?.enabled
+            ? { headers: { "anthropic-beta": "web-fetch-2025-09-10" } }
+            : undefined;
+    }
+
     async invoke(
         prompt: string,
         config: AnthropicConfig
@@ -34,8 +63,6 @@ export class AnthropicProvider implements ILLMProvider {
             topK,
             topP,
             thinking,
-            webSearch,
-            webFetch,
             providerOptions,
             stream: stream,
         } = config;
@@ -44,26 +71,7 @@ export class AnthropicProvider implements ILLMProvider {
             throw new Error("maxTokens is required for Anthropic models");
         }
 
-        // Build tools array (can have both web search and web fetch)
-        const tools: any[] = [];
-        if (webSearch?.enabled) {
-            tools.push({
-                type: "web_search_20250305" as const,
-                name: "web_search" as const,
-                ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
-                ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
-                ...(webSearch.userLocation && { user_location: webSearch.userLocation }),
-            });
-        }
-        if (webFetch?.enabled) {
-            tools.push({
-                type: "web_fetch_20250910" as const,
-                name: "web_fetch" as const,
-                ...(webFetch.maxUses !== undefined && { max_uses: webFetch.maxUses }),
-                ...(webFetch.allowedDomains && { allowed_domains: webFetch.allowedDomains }),
-                ...(webFetch.citations && { citations: webFetch.citations }),
-            });
-        }
+        const tools = this.buildWebTools(config);
 
         const baseParams = {
             model,
@@ -77,10 +85,7 @@ export class AnthropicProvider implements ILLMProvider {
             ...(tools.length > 0 && { tools }),
         };
 
-        // Add beta header if web fetch is enabled
-        const requestOptions = webFetch?.enabled
-            ? { headers: { "anthropic-beta": "web-fetch-2025-09-10" } }
-            : undefined;
+        const requestOptions = this.buildRequestOptions(config);
 
         const response = stream
             ? await this.client.messages.create({
@@ -179,8 +184,6 @@ export class AnthropicProvider implements ILLMProvider {
             topK,
             topP,
             thinking,
-            webSearch,
-            webFetch,
             providerOptions,
         } = config;
 
@@ -188,26 +191,7 @@ export class AnthropicProvider implements ILLMProvider {
             throw new Error("maxTokens is required for Anthropic models");
         }
 
-        // Build tools array
-        const tools: any[] = [];
-        if (webSearch?.enabled) {
-            tools.push({
-                type: "web_search_20250305" as const,
-                name: "web_search" as const,
-                ...(webSearch.maxUses !== undefined && { max_uses: webSearch.maxUses }),
-                ...(webSearch.allowedDomains && { allowed_domains: webSearch.allowedDomains }),
-                ...(webSearch.userLocation && { user_location: webSearch.userLocation }),
-            });
-        }
-        if (webFetch?.enabled) {
-            tools.push({
-                type: "web_fetch_20250910" as const,
-                name: "web_fetch" as const,
-                ...(webFetch.maxUses !== undefined && { max_uses: webFetch.maxUses }),
-                ...(webFetch.allowedDomains && { allowed_domains: webFetch.allowedDomains }),
-                ...(webFetch.citations && { citations: webFetch.citations }),
-            });
-        }
+        const tools = this.buildWebTools(config);
 
         const baseParams = {
             model,
@@ -221,9 +205,7 @@ export class AnthropicProvider implements ILLMProvider {
             ...(tools.length > 0 && { tools }),
         };
 
-        const requestOptions = webFetch?.enabled
-            ? { headers: { "anthropic-beta": "web-fetch-2025-09-10" } }
-            : undefined;
+        const requestOptions = this.buildRequestOptions(config);
 
         const stream = await this.client.messages.create({
             ...baseParams,
@@ -268,6 +250,9 @@ export class AnthropicProvider implements ILLMProvider {
             throw new Error("maxTokens is required for Anthropic batch requests");
         }
 
+        const tools = this.buildWebTools(anthropicConfig);
+        const requestOptions = this.buildRequestOptions(anthropicConfig);
+
         const batchRequests = requests.map((req) => ({
             custom_id: req.customId,
             params: {
@@ -279,12 +264,13 @@ export class AnthropicProvider implements ILLMProvider {
                 ...(topP !== undefined && { top_p: topP }),
                 ...(providerOptions?.systemPrompt && { system: providerOptions.systemPrompt }),
                 ...(thinking && { thinking }),
+                ...(tools.length > 0 && { tools }),
             },
         }));
 
         const batch = await this.client.messages.batches.create({
             requests: batchRequests,
-        });
+        }, requestOptions);
 
         return {
             batchId: batch.id,
@@ -357,6 +343,8 @@ export class AnthropicProvider implements ILLMProvider {
                     itemResult.tokenUsage = {
                         inputTokens: message.usage?.input_tokens || 0,
                         outputTokens: message.usage?.output_tokens || 0,
+                        searchCount: (message.usage as any)?.server_tool_use?.web_search_requests,
+                        fetchCount: (message.usage as any)?.server_tool_use?.web_fetch_requests,
                     };
                     break;
                 }
